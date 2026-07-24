@@ -220,7 +220,6 @@ module.exports = {
       }
 
       log('Llamando distube.play con', finalQuery);
-      const hasQueue = interaction.client.distube.getQueue(interaction.guild);
       await interaction.client.distube.play(voiceChannel, finalQuery, {
         member: interaction.member,
         textChannel: interaction.channel,
@@ -228,9 +227,8 @@ module.exports = {
       });
       log('distube.play completado');
 
-      if (!hasQueue && interaction.deferred && !interaction.replied) {
-        await interaction.editReply({ content: '🔍 Buscando...' }).catch(() => {});
-        setTimeout(() => interaction.deleteReply().catch(() => {}), 1500);
+      if (interaction.deferred && !interaction.replied) {
+        interaction.editReply({ content: '✅' }).then(() => interaction.deleteReply()).catch(() => {});
       }
     } catch (error) {
       log('ERROR', error.message);

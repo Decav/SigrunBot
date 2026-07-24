@@ -15,8 +15,6 @@ module.exports = {
 
     if (queue.songs.length <= 1) return;
 
-    const interaction = queue.metadata?.interaction;
-
     const embed = new EmbedBuilder()
       .setColor(EMBED_COLOR)
       .setTitle('📥 Añadido a la cola')
@@ -28,14 +26,6 @@ module.exports = {
         { name: '📊 Posición', value: `#${queue.songs.indexOf(song)} en la cola`, inline: true },
       );
 
-    if (interaction) {
-      await interaction.editReply({ embeds: [embed] }).catch(() => {});
-    } else {
-      await queue.textChannel?.send({ embeds: [embed] }).catch(() => {});
-    }
-
-    if (queue.metadata?.interaction) {
-      queue.metadata.interaction = null;
-    }
+    await queue.textChannel?.send({ embeds: [embed] }).catch(() => {});
   },
 };

@@ -6,12 +6,6 @@ module.exports = {
   async execute(queue, playlist) {
     console.log(`[addList] "${playlist.name}" | ${playlist.songs.length} canciones | Cola: ${queue.songs.length}`);
 
-    const interaction = queue.metadata?.interaction;
-
-    if (interaction) {
-      interaction.deleteReply().catch(() => {});
-    }
-
     const embed = new EmbedBuilder()
       .setColor(EMBED_COLOR)
       .setTitle('📋 Playlist añadida')
@@ -35,9 +29,5 @@ module.exports = {
     }
 
     await queue.textChannel?.send({ embeds: [embed] }).catch(() => {});
-
-    if (queue.metadata?.interaction) {
-      queue.metadata.interaction = null;
-    }
   },
 };
