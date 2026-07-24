@@ -2,9 +2,21 @@ require('dotenv').config();
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const { DisTube } = require('distube');
 const { YtDlpPlugin } = require('@distube/yt-dlp');
-const ffmpegPath = require('ffmpeg-static');
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
+
+let ffmpegPath;
+try {
+  const systemFfmpeg = execSync('which ffmpeg 2>/dev/null || echo /usr/bin/ffmpeg').toString().trim();
+  if (systemFfmpeg && fs.existsSync(systemFfmpeg)) {
+    ffmpegPath = systemFfmpeg;
+  }
+} catch {}
+if (!ffmpegPath || !fs.existsSync(ffmpegPath)) {
+  ffmpegPath = require('ffmpeg-static');
+}
+console.log(`🎵 ffmpeg path: ${ffmpegPath}`);
 
 const client = new Client({
   intents: [
