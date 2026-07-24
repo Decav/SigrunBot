@@ -13,6 +13,7 @@ WORKDIR /app
 
 COPY package*.json ./
 RUN npm install
+RUN npm rebuild @discordjs/opus
 COPY patch-ytdlp.js ./
 RUN node patch-ytdlp.js
 
