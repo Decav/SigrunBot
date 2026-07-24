@@ -9,20 +9,28 @@ if (!fs.existsSync(target)) {
 }
 
 let content = fs.readFileSync(target, 'utf8');
+let patched = false;
 
-const oldLine = 'if (code === 0) resolve(JSON.parse(output));';
-const newLine = 'if (code === 0) { const i = output.indexOf(\'{\'); resolve(JSON.parse(i > 0 ? output.slice(i) : output)); }';
-
-if (content.includes(newLine)) {
-  console.log('yt-dlp plugin already patched');
-  process.exit(0);
+// Patch 1: Fix deprecation warning parsing
+const oldParse = 'if (code === 0) resolve(JSON.parse(output));';
+const newParse = 'if (code === 0) { const i = output.indexOf(\'{\'); resolve(JSON.parse(i > 0 ? output.slice(i) : output)); }';
+if (!content.includes(newParse)) {
+  content = content.replace(oldParse, newParse);
+  console.log('[patch] Deprecation warning fix applied');
+  patched = true;
 }
 
-if (!content.includes(oldLine)) {
-  console.log('yt-dlp plugin: target line not found, may already be patched or different version');
-  process.exit(0);
+// Patch 2: Fix getStreamURL for more stable stream URLs
+const oldGetter = 'const info = await json(song.url, {\n      dumpSingleJson: true,\n      noWarnings: true,\n      noCallHome: true,\n      preferFreeFormats: true,\n      skipDownload: true,\n      simulate: true,\n      format: "ba/ba*"\n    })';
+const newGetter = 'const info = await json(song.url, {\n      dumpSingleJson: true,\n      noWarnings: true,\n      noCallHome: true,\n      skipDownload: true,\n      simulate: true,\n      format: "bestaudio/best",\n      extractorArgs: "youtube:player_client=android,ios"\n    })';
+if (content.includes(oldGetter) && !content.includes(newGetter)) {
+  content = content.replace(oldGetter, newGetter);
+  console.log('[patch] Stream URL stability fix applied');
+  patched = true;
 }
 
-content = content.replace(oldLine, newLine);
+if (!patched) {
+  console.log('yt-dlp plugin already fully patched');
+}
+
 fs.writeFileSync(target, content);
-console.log('yt-dlp plugin patched successfully');
