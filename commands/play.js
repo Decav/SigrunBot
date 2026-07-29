@@ -4,7 +4,7 @@ const { execFileSync } = require('child_process');
 const path = require('path');
 const { silentGuilds } = require('../events/distube/addSong');
 
-const YTDLP_PATH = path.join(__dirname, '..', 'node_modules', '@distube', 'yt-dlp', 'bin', 'yt-dlp.exe');
+const YTDLP_PATH = path.join(__dirname, '..', 'node_modules', '@distube', 'yt-dlp', 'bin', `yt-dlp${process.platform === 'win32' ? '.exe' : ''}`);
 const URL_REGEX = /^https?:\/\//i;
 const SPOTIFY_REGEX = /open\.spotify\.com\/(?:intl-\w+\/)?(track|album|playlist)\/([a-zA-Z0-9]+)/;
 const YOUTUBE_REGEX = /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]+)/;
