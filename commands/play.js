@@ -91,12 +91,15 @@ async function searchYoutube(query) {
   });
 
   let entry = result;
-  if (result._type === 'playlist' && result.entries?.length > 0) {
+  if (result._type === 'playlist') {
+    if (!result.entries || result.entries.length === 0) {
+      throw new Error('No se encontraron resultados en YouTube.');
+    }
     entry = result.entries[0];
   }
 
   const videoUrl = entry?.webpage_url || (entry?.id ? `https://www.youtube.com/watch?v=${entry.id}` : null);
-  if (!videoUrl) throw new Error('No se encontraron resultados en YouTube.');
+  if (!videoUrl || videoUrl.startsWith('ytsearch:')) throw new Error('No se encontraron resultados en YouTube.');
 
   log('Resultado YouTube', `${entry.title || query} — ${videoUrl}`);
   return videoUrl;
@@ -255,13 +258,16 @@ module.exports = {
 
             if (urls.length > 1) {
               silentGuilds.add(interaction.guild.id);
-              for (let i = 1; i < urls.length; i++) {
-                await interaction.client.distube.play(voiceChannel, urls[i], {
-                  member: interaction.member,
-                  textChannel: interaction.channel,
-                });
+              try {
+                for (let i = 1; i < urls.length; i++) {
+                  await interaction.client.distube.play(voiceChannel, urls[i], {
+                    member: interaction.member,
+                    textChannel: interaction.channel,
+                  });
+                }
+              } finally {
+                silentGuilds.delete(interaction.guild.id);
               }
-              silentGuilds.delete(interaction.guild.id);
             }
 
             if (interaction.deferred && !interaction.replied) {
@@ -291,17 +297,20 @@ module.exports = {
           const total = mixUrls.length - 1;
           log(`Añadiendo ${total} canciones del mix...`);
 
-          for (let i = 1; i < mixUrls.length; i++) {
-            if (i % 5 === 0 && interaction.deferred) {
-              await interaction.editReply({ content: `🎵 Añadiendo mix: ${i}/${total}...` }).catch(() => {});
+          try {
+            for (let i = 1; i < mixUrls.length; i++) {
+              if (i % 5 === 0 && interaction.deferred) {
+                await interaction.editReply({ content: `🎵 Añadiendo mix: ${i}/${total}...` }).catch(() => {});
+              }
+              await interaction.client.distube.play(voiceChannel, mixUrls[i], {
+                member: interaction.member,
+                textChannel: interaction.channel,
+              });
             }
-            await interaction.client.distube.play(voiceChannel, mixUrls[i], {
-              member: interaction.member,
-              textChannel: interaction.channel,
-            });
+          } finally {
+            silentGuilds.delete(interaction.guild.id);
           }
 
-          silentGuilds.delete(interaction.guild.id);
           log(`${total} canciones del mix añadidas en silencio`);
         }
 
