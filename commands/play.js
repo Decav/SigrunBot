@@ -17,30 +17,66 @@ function log(step, data) {
   console.log(`[PLAY] ${step}`, str);
 }
 
-async function resolveSpotify(url) {
-  log('Resolviendo Spotify...', url);
+async function getSpotifyEmbedData(spotifyUrl) {
+  const match = spotifyUrl.match(SPOTIFY_REGEX);
+  if (!match) throw new Error('Enlace de Spotify inválido');
+  const type = match[1];
+  const id = match[2];
+
+  const embedUrl = `https://open.spotify.com/embed/${type}/${id}`;
+  const response = await fetch(embedUrl, { headers: { 'Accept': 'text/html' } });
+  if (!response.ok) throw new Error(`Spotify embed responded with ${response.status}`);
+
+  const html = await response.text();
+  const m = html.match(/<script id="__NEXT_DATA__" type="application\/json"[^>]*>([^<]+)<\/script>/);
+  if (!m) throw new Error('No se pudo extraer datos del embed de Spotify');
+
+  const data = JSON.parse(m[1]);
+  const status = data?.props?.pageProps?.status;
+  if (status === 404) throw new Error('Spotify no soporta embed para este tipo de enlace');
+  const entity = data?.props?.pageProps?.state?.data?.entity;
+  if (!entity) throw new Error('No se pudo obtener información de Spotify');
+  return entity;
+}
+
+async function resolveSpotifyOembed(url) {
   const oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`;
+  const response = await fetch(oembedUrl);
+  if (!response.ok) throw new Error(`Spotify oEmbed responded with ${response.status}`);
+  const data = await response.json();
+  const title = data.title || '';
+  const author = data.author_name || '';
+  log('Spotify oEmbed', `${title} — ${author}`);
+  return `${author} ${title}`.trim();
+}
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
+async function resolveSpotifyTrack(url) {
+  log('Resolviendo track de Spotify (embed API)...', url);
+  const entity = await getSpotifyEmbedData(url);
 
-  try {
-    const response = await fetch(oembedUrl, { signal: controller.signal });
+  const title = entity.name || '';
+  const artist = entity.artists?.map((a) => a.name).join(', ') || entity.subtitle || '';
+  log('Spotify info', `${title} — ${artist}`);
+  return `${artist} ${title}`.trim();
+}
 
-    if (!response.ok) {
-      throw new Error(`Spotify oEmbed responded with ${response.status}`);
-    }
+async function resolveSpotifyPlaylist(url) {
+  log('Resolviendo playlist/álbum de Spotify (embed API)...', url);
+  const entity = await getSpotifyEmbedData(url);
 
-    const data = await response.json();
-    clearTimeout(timeout);
+  const trackList = entity.trackList || [];
+  const queries = trackList
+    .slice(0, 25)
+    .map((item) => {
+      const track = item.track || item;
+      const title = track.title || track.name || '';
+      const artist = track.subtitle || track.artists?.map((a) => a.name).join(', ') || '';
+      return `${artist} ${title}`.trim();
+    })
+    .filter((q) => q.length > 1);
 
-    const title = data.title || '';
-    log('Spotify info', `${title} — ${data.author_name || ''}`);
-    return `${data.author_name || ''} ${title}`.trim();
-  } catch (err) {
-    clearTimeout(timeout);
-    throw new Error(`No se pudo obtener información de Spotify: ${err.message}`);
-  }
+  log('Spotify playlist info', `${entity.name} — ${queries.length} canciones`);
+  return { name: entity.name, queries };
 }
 
 async function searchYoutube(query) {
@@ -166,9 +202,75 @@ module.exports = {
       log('Tipo detectado', spotifyMatch ? `Spotify (${spotifyMatch[1]})` : isYoutube ? 'YouTube' : URL_REGEX.test(rawQuery) ? 'URL externa' : 'Texto');
 
       if (spotifyMatch) {
-        log('Detectado enlace Spotify');
-        const searchQuery = await resolveSpotify(rawQuery);
-        finalQuery = await searchYoutube(searchQuery);
+        const spotifyType = spotifyMatch[1];
+        log('Detectado enlace Spotify', spotifyType);
+
+        if (spotifyType === 'track') {
+          const searchQuery = await resolveSpotifyTrack(rawQuery);
+          finalQuery = await searchYoutube(searchQuery);
+        } else {
+          let name = '';
+          let queries = [];
+
+          try {
+            const result = await resolveSpotifyPlaylist(rawQuery);
+            name = result.name;
+            queries = result.queries;
+          } catch (embedErr) {
+            log('Embed API no disponible, fallback a oEmbed', embedErr.message);
+            const albumQuery = await resolveSpotifyOembed(rawQuery);
+            finalQuery = await searchYoutube(albumQuery);
+            queries = [];
+          }
+
+          if (queries.length === 0 && finalQuery === rawQuery) {
+            return interaction.editReply('❌ No se pudieron obtener canciones de la playlist de Spotify.');
+          }
+
+          if (queries.length > 0) {
+            log(`Resolviendo ${queries.length} canciones de Spotify en YouTube...`);
+            const urls = [];            for (let i = 0; i < queries.length; i++) {
+              if (i % 5 === 0 && interaction.deferred) {
+                await interaction.editReply({ content: `🔎 Buscando canciones: ${i}/${queries.length}...` }).catch(() => {});
+              }
+              try {
+                const url = await searchYoutube(queries[i]);
+                urls.push(url);
+              } catch {
+                // Skip failed searches
+              }
+            }
+
+            if (urls.length === 0) {
+              return interaction.editReply('❌ No se encontraron canciones en YouTube.');
+            }
+
+            finalQuery = urls[0];
+            log(`Reproduciendo playlist de Spotify "${name}"`);
+            await interaction.client.distube.play(voiceChannel, finalQuery, {
+              member: interaction.member,
+              textChannel: interaction.channel,
+              metadata: { interaction },
+            });
+
+            if (urls.length > 1) {
+              silentGuilds.add(interaction.guild.id);
+              for (let i = 1; i < urls.length; i++) {
+                await interaction.client.distube.play(voiceChannel, urls[i], {
+                  member: interaction.member,
+                  textChannel: interaction.channel,
+                });
+              }
+              silentGuilds.delete(interaction.guild.id);
+            }
+
+            if (interaction.deferred && !interaction.replied) {
+              await interaction.editReply({ content: `✅ Playlist de Spotify añadida (${urls.length} canciones).` }).catch(() => {});
+              setTimeout(() => interaction.deleteReply().catch(() => {}), 3000);
+            }
+            return;
+          }
+        }
       } else if (isYoutube && RADIO_MIX_REGEX.test(rawQuery)) {
         log('Detectado Radio Mix de YouTube');
         const mixUrls = await resolveRadioMix(rawQuery);
