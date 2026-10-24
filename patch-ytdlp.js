@@ -29,6 +29,15 @@ if (content.includes(oldGetter) && !content.includes(newGetter)) {
   patched = true;
 }
 
+// Patch 3: Fix resolve to use android/ios clients (avoids bot detection)
+const oldResolve = 'const info = await json(url, {\n      dumpSingleJson: true,\n      noWarnings: true,\n      noCallHome: true,\n      preferFreeFormats: true,\n      skipDownload: true,\n      simulate: true\n    })';
+const newResolve = 'const info = await json(url, {\n      dumpSingleJson: true,\n      noWarnings: true,\n      noCallHome: true,\n      skipDownload: true,\n      simulate: true,\n      extractorArgs: "youtube:player_client=android,ios"\n    })';
+if (content.includes(oldResolve) && !content.includes(newResolve)) {
+  content = content.replace(oldResolve, newResolve);
+  console.log('[patch] Resolve bot-detection fix applied');
+  patched = true;
+}
+
 if (!patched) {
   console.log('yt-dlp plugin already fully patched');
 }
