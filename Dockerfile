@@ -24,4 +24,7 @@ RUN mkdir -p node_modules/@distube/yt-dlp/bin && \
     https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp && \
     chmod +x node_modules/@distube/yt-dlp/bin/yt-dlp
 
-CMD ["node", "index.js"]
+COPY entrypoint.sh ./
+RUN chmod +x entrypoint.sh
+
+ENTRYPOINT ["./entrypoint.sh"]
